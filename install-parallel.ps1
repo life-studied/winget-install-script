@@ -14,7 +14,8 @@ $modules = @(
     "inputtip",
     "captura",
     "nvm",
-    "addpath"
+    "addpath",
+    "g"
 )
 
 $global:exitSuccess            = 0
@@ -41,6 +42,18 @@ Write-Host "脚本以管理员权限运行，执行安装流程..."
 
 # 1. 获取当前脚本所在目录
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
+
+# 获取github token（如果有的话），以避免API限流(从文件github.token)
+$tokenFile = Join-Path $scriptDir "github.token"
+if (-Not (Test-Path $tokenFile)) {
+    Write-Host "未找到 github.token 文件，继续无token模式，可能导致限流。" -ForegroundColor Yellow
+    Write-Host "如果遇到下载失败，请在脚本目录下创建 github.token 文件" -ForegroundColor Yellow
+    Write-Host "获取路径：https://github.com/settings/personal-access-tokens" -ForegroundColor Yellow
+} else {
+    $githubToken = Get-Content -Path $tokenFile -Raw
+    Write-Host "已读取 github token 文件，使用 token 模式下载以避免限流。" -ForegroundColor Green
+    Write-Host "$githubToken" -ForegroundColor DarkGray
+}
 
 # 2. 创建缓存文件
 $cacheFile = Join-Path $scriptDir "install_cache.txt"
@@ -85,7 +98,7 @@ foreach ($module in $modulesToInstall) {
     
     # 创建更健壮的脚本块，确保能捕获所有错误
     $jobScript = {
-        param($scriptPath, $moduleName)
+        param($scriptPath, $moduleName, $githubToken)
         try {
             # 在作业中重新定义全局变量，因为作业是独立的进程
             $exitSuccess            = 0
@@ -102,8 +115,9 @@ foreach ($module in $modulesToInstall) {
             $null = $exitEnvValConfigFail
             $null = $customToolsPath
             
-            # 执行安装脚本
-            & $scriptPath
+            # 执行安装脚本，传递参数
+            # @1 = $githubToken
+            & $scriptPath -githubToken $githubToken
             
             # 捕获退出代码
             $exitCode = $LASTEXITCODE
@@ -127,7 +141,7 @@ foreach ($module in $modulesToInstall) {
         }
     }
     
-    $job = Start-Job -ScriptBlock $jobScript -ArgumentList $moduleScript, $module
+    $job = Start-Job -ScriptBlock $jobScript -ArgumentList $moduleScript, $module, $githubToken
     
     $jobs += @{
         Job = $job
@@ -178,16 +192,11 @@ foreach ($result in $results) {
     if ($result.ExitCode -eq $global:exitSuccess) {
         Add-Content -Path $cacheFile -Value $result.Module
         $modulesInstalled += $result.Module
-        Write-Host "✓ 模块 $($result.Module) 安装成功" -ForegroundColor Green
     } else {
         $modulesFailed += @{
             Module = $result.Module
             ExitCode = $result.ExitCode
             Error = $result.Error
-        }
-        Write-Host "✗ 模块 $($result.Module) 安装失败，退出代码：$($result.ExitCode)" -ForegroundColor Red
-        if ($result.Error) {
-            Write-Host "  错误详情: $($result.Error)" -ForegroundColor Yellow
         }
     }
 }
