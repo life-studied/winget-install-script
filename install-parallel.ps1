@@ -13,7 +13,8 @@ $modules = @(
     "cmake",
     "inputtip",
     "captura",
-    "nvm"
+    "nvm",
+    "addpath"
 )
 
 $global:exitSuccess            = 0
