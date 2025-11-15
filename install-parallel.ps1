@@ -15,7 +15,8 @@ $modules = @(
     "captura",
     "nvm",
     "addpath",
-    "g"
+    "g",
+    "vscode"
 )
 
 $global:exitSuccess            = 0
