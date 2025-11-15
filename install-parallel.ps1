@@ -12,13 +12,31 @@ $modules = @(
     "steam",
     "cmake",
     "inputtip",
-    "captura"
+    "captura",
+    "nvm"
 )
+
+$global:exitSuccess            = 0
+$global:exitInstallFail        = 1
+$global:exitInstallButNotFound = 2
+$global:exitEnvValConfigFail   = 3
 
 $global:customToolsPath = "$env:USERPROFILE\CustomTools"
 if (Test-Path $customToolsPath) {
     New-Item -ItemType Directory -Path $customToolsPath -Force | Out-Null
 }
+
+# 管理员权限
+if (-not ([Security.Principal.WindowsPrincipal]`
+        [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
+        [Security.Principal.WindowsBuiltInRole]::Administrator)) {
+    Write-Host "当前脚本未以管理员权限运行，正在以管理员权限重新启动脚本..."
+    Start-Process pwsh -ArgumentList "-NoExit","-File",$PSCommandPath `
+                 -Verb RunAs -Wait
+    exit
+}
+
+Write-Host "脚本以管理员权限运行，执行安装流程..."
 
 # 1. 获取当前脚本所在目录
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
@@ -156,7 +174,7 @@ foreach ($jobInfo in $jobs) {
 Write-Host ""
 Write-Host "处理安装结果..."
 foreach ($result in $results) {
-    if ($result.Success -eq $true -and $result.ExitCode -eq $global:exitSuccess) {
+    if ($result.ExitCode -eq $global:exitSuccess) {
         Add-Content -Path $cacheFile -Value $result.Module
         $modulesInstalled += $result.Module
         Write-Host "✓ 模块 $($result.Module) 安装成功" -ForegroundColor Green
